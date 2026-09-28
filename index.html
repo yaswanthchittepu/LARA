@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>LARA: Safe Inference-Time Alignment</title>
-<meta name="description" content="LARA calibrates a single safety multiplier on a small prompt set and turns any inference-time decoder into a safety-constrained one, with no weight updates. COLM 2026.">
+<meta name="description" content="LARA calibrates a single safety multiplier on a small prompt set and turns any inference-time decoder into a safety-constrained one, with no weight updates. Accepted at COLM 2026.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap">
@@ -104,12 +104,20 @@
     gap: 1.5rem;
   }
   .venue {
+    display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 0.9rem;
     font: 500 0.8rem/1 var(--mono);
     letter-spacing: 0.08em;
     text-transform: uppercase;
     color: var(--ink-2);
   }
-  .venue b { color: var(--ink); font-weight: 500; }
+  .venue .badge {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    padding: 0.5rem 0.8rem; border-radius: 999px;
+    background: var(--ok-wash); color: var(--ok);
+    border: 1px solid currentColor;
+  }
+  .venue .badge svg { width: 0.85rem; height: 0.85rem; flex: none; }
+  .venue .badge b { color: var(--ink); font-weight: 600; }
   h1 {
     font: 500 clamp(2.1rem, 5vw, 3.35rem)/1.08 var(--serif);
     letter-spacing: -0.015em;
@@ -332,7 +340,10 @@
 
 <div class="wrap">
   <header class="hero">
-    <div class="venue"><b>COLM 2026</b> · Conference on Language Modeling</div>
+    <div class="venue">
+      <span class="badge"><svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M3 8.5l3.2 3L13 4.5"/></svg>Accepted at <b>COLM 2026</b></span>
+      <span>Conference on Language Modeling</span>
+    </div>
     <h1>Safe Inference-Time Alignment via <em>Lagrangian Reward Augmentation</em></h1>
     <div class="authors">
       <ul>
