@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>LARA: Safe Inference-Time Alignment</title>
+<meta name="description" content="LARA calibrates a single safety multiplier on a small prompt set and turns any inference-time decoder into a safety-constrained one, with no weight updates. COLM 2026.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap">
+<style>
+  :root {
+    --ground: #F6F7FA;
+    --surface: #FFFFFF;
+    --ink: #141827;
+    --ink-2: #4A5068;
+    --ink-3: #6E7489;
+    --rule: #DDE1EA;
+    --reward: #1D5FB4;
+    --cost: #B8324A;
+    --cost-wash: rgba(184, 50, 74, 0.08);
+    --lambda: #9A6A00;
+    --lambda-wash: rgba(176, 122, 6, 0.12);
+    --ok: #1F7A4D;
+    --ok-wash: rgba(31, 122, 77, 0.10);
+    --plate: #FFFFFF;
+    --code-bg: #EEF0F5;
+
+    --serif: "Newsreader", "Iowan Old Style", "Palatino Linotype", Georgia, serif;
+    --sans: "IBM Plex Sans", -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    --mono: "IBM Plex Mono", ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+
+    --measure: 42rem;
+    --wide: 64rem;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      color-scheme: dark;
+      --ground: #10131C;
+      --surface: #171B27;
+      --ink: #E7EAF2;
+      --ink-2: #A9B0C4;
+      --ink-3: #868DA3;
+      --rule: #2A3042;
+      --reward: #7AA8F2;
+      --cost: #F0808F;
+      --cost-wash: rgba(240, 128, 143, 0.10);
+      --lambda: #E7B53C;
+      --lambda-wash: rgba(231, 181, 60, 0.14);
+      --ok: #5CC593;
+      --ok-wash: rgba(92, 197, 147, 0.12);
+      --plate: #F4F5F8;
+      --code-bg: #1C2130;
+    }
+  }
+  :root[data-theme="dark"] {
+    color-scheme: dark;
+    --ground: #10131C;
+    --surface: #171B27;
+    --ink: #E7EAF2;
+    --ink-2: #A9B0C4;
+    --ink-3: #868DA3;
+    --rule: #2A3042;
+    --reward: #7AA8F2;
+    --cost: #F0808F;
+    --cost-wash: rgba(240, 128, 143, 0.10);
+    --lambda: #E7B53C;
+    --lambda-wash: rgba(231, 181, 60, 0.14);
+    --ok: #5CC593;
+    --ok-wash: rgba(92, 197, 147, 0.12);
+    --plate: #F4F5F8;
+    --code-bg: #1C2130;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body {
+    margin: 0;
+    background: var(--ground);
+    color: var(--ink);
+    font: 400 1.0625rem/1.65 var(--sans);
+    padding-inline: 20px;
+  }
+  img { max-width: 100%; height: auto; display: block; }
+  a { color: var(--reward); text-underline-offset: 0.18em; text-decoration-thickness: 1px; }
+  a:hover { text-decoration-thickness: 2px; }
+  :focus-visible { outline: 2px solid var(--reward); outline-offset: 3px; border-radius: 3px; }
+
+  .wrap { max-width: var(--wide); margin-inline: auto; }
+  .col { max-width: var(--measure); }
+
+  /* math vocabulary: each quantity keeps its color everywhere */
+  .r { color: var(--reward); }
+  .c { color: var(--cost); }
+  .l { color: var(--lambda); }
+  .m { font-family: var(--serif); font-style: italic; }
+  .m sub, .m sup { font-style: normal; font-size: 0.68em; }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; }
+
+  /* ---------- hero ---------- */
+  header.hero {
+    padding-block: 4.5rem 3rem;
+    display: grid;
+    gap: 1.5rem;
+  }
+  .venue {
+    font: 500 0.8rem/1 var(--mono);
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--ink-2);
+  }
+  .venue b { color: var(--ink); font-weight: 500; }
+  h1 {
+    font: 500 clamp(2.1rem, 5vw, 3.35rem)/1.08 var(--serif);
+    letter-spacing: -0.015em;
+    margin: 0;
+    max-width: 22ch;
+    text-wrap: balance;
+  }
+  h1 em { font-style: italic; }
+  .authors {
+    display: grid;
+    gap: 0.35rem;
+    font-size: 1rem;
+  }
+  .authors ul { list-style: none; margin: 0; padding: 0; display: flex; flex-wrap: wrap; gap: 0.25rem 1.25rem; }
+  .authors li { white-space: nowrap; }
+  .authors sup { font: 500 0.7em var(--mono); color: var(--ink-3); margin-left: 1px; }
+  .affil { color: var(--ink-2); font-size: 0.92rem; }
+  .affil sup { font: 500 0.7em var(--mono); color: var(--ink-3); }
+
+  .links { display: flex; flex-wrap: wrap; gap: 0.6rem; }
+  .btn {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font: 500 0.92rem/1 var(--sans);
+    padding: 0.65rem 1rem;
+    border-radius: 999px;
+    border: 1px solid var(--rule);
+    background: var(--surface);
+    color: var(--ink);
+    text-decoration: none;
+  }
+  .btn:hover { border-color: var(--ink-3); text-decoration: none; }
+  .btn.primary { background: var(--ink); color: var(--ground); border-color: var(--ink); }
+  .btn.primary:hover { opacity: 0.88; }
+  .btn[aria-disabled="true"] { color: var(--ink-3); border-style: dashed; cursor: default; }
+  .btn svg { width: 1rem; height: 1rem; flex: none; }
+
+  /* the thesis equation */
+  .thesis {
+    margin-top: 1.5rem;
+    border-top: 1px solid var(--rule);
+    padding-top: 2.25rem;
+    display: grid;
+    grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+    gap: 1.5rem 3rem;
+    align-items: center;
+  }
+  .eq-big {
+    font: 400 clamp(2.6rem, 8vw, 4.6rem)/1 var(--serif);
+    font-style: italic;
+    white-space: nowrap;
+    letter-spacing: -0.01em;
+  }
+  .eq-big sub { font-size: 0.45em; font-style: normal; }
+  .eq-big .op { font-style: normal; color: var(--ink-3); padding-inline: 0.12em; }
+  .thesis p { margin: 0; font-size: 1.12rem; color: var(--ink-2); max-width: 34rem; }
+  .thesis p strong { color: var(--ink); font-weight: 600; }
+
+  /* ---------- sections ---------- */
+  section { padding-block: 3.25rem; border-top: 1px solid var(--rule); }
+  .eyebrow {
+    font: 500 0.75rem/1 var(--mono);
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--ink-3);
+    margin: 0 0 0.9rem;
+  }
+  h2 {
+    font: 500 clamp(1.6rem, 3.4vw, 2.15rem)/1.15 var(--serif);
+    letter-spacing: -0.01em;
+    margin: 0 0 1.1rem;
+    text-wrap: balance;
+    max-width: 30ch;
+  }
+  h3 { font: 600 1.02rem/1.35 var(--sans); margin: 0 0 0.4rem; }
+  p { margin: 0 0 1rem; }
+  .lede { font-size: 1.15rem; color: var(--ink-2); }
+
+  /* abstract */
+  details.abstract { margin-top: 0.5rem; }
+  details.abstract summary {
+    cursor: pointer; font: 500 0.92rem var(--sans); color: var(--ink-2);
+    list-style: none; display: inline-flex; gap: 0.4rem; align-items: center;
+  }
+  details.abstract summary::-webkit-details-marker { display: none; }
+  details.abstract summary::before { content: "+"; font-family: var(--mono); color: var(--ink-3); }
+  details.abstract[open] summary::before { content: "−"; }
+  details.abstract p { margin-top: 0.9rem; color: var(--ink-2); font-size: 0.98rem; }
+
+  /* problem/solution contrast */
+  .contrast { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; margin-top: 1.75rem; }
+  .contrast > div { padding: 1.25rem 1.35rem; border: 1px solid var(--rule); border-radius: 10px; }
+  .contrast .before { background: transparent; }
+  .contrast .after { background: var(--surface); }
+  .contrast .tag { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); margin-bottom: 0.7rem; }
+  .contrast .formula { font: 400 1.35rem/1.3 var(--serif); font-style: italic; margin-bottom: 0.6rem; }
+  .contrast .formula .w { color: var(--ink-3); }
+  .contrast p { margin: 0; font-size: 0.95rem; color: var(--ink-2); }
+
+  /* pipeline: a real sequence, so it is numbered */
+  ol.steps { list-style: none; margin: 2rem 0 0; padding: 0; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0; counter-reset: s; }
+  ol.steps li { counter-increment: s; padding: 0 1.5rem 0 0; position: relative; }
+  ol.steps li + li { padding-left: 1.5rem; border-left: 1px solid var(--rule); }
+  ol.steps li::before {
+    content: "Step " counter(s);
+    display: block; font: 500 0.72rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase;
+    color: var(--ink-3); margin-bottom: 0.8rem;
+  }
+  ol.steps .sf { font: 400 1.12rem/1.35 var(--serif); font-style: italic; margin: 0.35rem 0 0.7rem; }
+  ol.steps p { font-size: 0.95rem; color: var(--ink-2); margin: 0; }
+
+  .derive { margin-top: 2.5rem; display: grid; gap: 1.25rem; }
+  .derive .row { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 1.25rem; align-items: baseline; }
+  .derive .k { font: 500 0.78rem/1.4 var(--mono); letter-spacing: 0.04em; color: var(--ink-3); text-transform: uppercase; }
+  .derive .v { font: 400 1.2rem/1.5 var(--serif); overflow-x: auto; }
+  .derive .v .note { display: block; font: 400 0.93rem/1.55 var(--sans); color: var(--ink-2); margin-top: 0.3rem; }
+  .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; font-size: 0.9em; margin-inline: 0.1em; }
+  .frac > span:first-child { border-bottom: 1px solid currentColor; padding-inline: 0.2em; }
+
+  /* ---------- the budget dial ---------- */
+  .dial {
+    margin-top: 2rem;
+    background: var(--surface);
+    border: 1px solid var(--rule);
+    border-radius: 14px;
+    padding: 1.75rem;
+    display: grid;
+    gap: 1.5rem;
+  }
+  .dial-top { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 1rem 2rem; align-items: end; }
+  .dial label { font: 500 0.95rem var(--sans); display: block; margin-bottom: 0.75rem; }
+  .dial label .hint { color: var(--ink-3); font-weight: 400; }
+  input[type="range"] { width: 100%; accent-color: var(--ink); margin: 0; }
+  .ticks { display: flex; justify-content: space-between; font: 400 0.75rem var(--mono); color: var(--ink-3); margin-top: 0.4rem; padding-inline: 2px; }
+  .ticks span { width: 0; display: flex; justify-content: center; white-space: nowrap; }
+  .readout { display: flex; gap: 1.75rem; flex-wrap: wrap; }
+  .readout div { display: grid; gap: 0.2rem; }
+  .readout .lab { font: 500 0.72rem/1 var(--mono); letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); }
+  .readout .val { font: 500 1.7rem/1.1 var(--mono); font-variant-numeric: tabular-nums; }
+  .status {
+    display: inline-flex; align-items: center; gap: 0.5rem;
+    font: 500 0.85rem/1 var(--sans); padding: 0.45rem 0.75rem; border-radius: 999px;
+    background: var(--ok-wash); color: var(--ok); justify-self: start;
+  }
+  .status::before { content: ""; width: 0.5rem; height: 0.5rem; border-radius: 50%; background: currentColor; }
+  .status.bad { background: var(--cost-wash); color: var(--cost); }
+  .status.idle { background: var(--lambda-wash); color: var(--lambda); }
+  .dial svg { width: 100%; height: auto; display: block; overflow: visible; }
+  .dial .explain { margin: 0; color: var(--ink-2); font-size: 0.97rem; min-height: 3.2em; }
+  .dial .src { font-size: 0.82rem; color: var(--ink-3); margin: 0; }
+
+  /* ---------- figures ---------- */
+  .fig { margin: 2rem 0 0; display: grid; gap: 0.9rem; }
+  .plate { background: var(--plate); border: 1px solid var(--rule); border-radius: 12px; padding: clamp(0.5rem, 2vw, 1.25rem); }
+  .plate img { margin-inline: auto; }
+  .fig figcaption { font-size: 0.9rem; color: var(--ink-2); max-width: var(--measure); }
+  .fig-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 1rem; }
+  .fig-grid .plate { display: grid; gap: 0.5rem; align-content: start; }
+  .fig-grid .plate .cap { font: 500 0.75rem/1 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: #5A6075; text-align: center; padding-top: 0.25rem; }
+
+  .seg { display: inline-flex; border: 1px solid var(--rule); border-radius: 999px; padding: 3px; background: var(--surface); gap: 2px; }
+  .seg button {
+    font: 500 0.88rem/1 var(--sans); color: var(--ink-2); background: transparent;
+    border: 0; border-radius: 999px; padding: 0.55rem 0.95rem; cursor: pointer;
+  }
+  .seg button[aria-pressed="true"] { background: var(--ink); color: var(--ground); }
+  .fig-head { display: flex; flex-wrap: wrap; justify-content: space-between; align-items: center; gap: 0.75rem; }
+  .fig-head .legend-note { font-size: 0.88rem; color: var(--ink-2); }
+
+  /* findings */
+  .findings { list-style: none; padding: 0; margin: 1.75rem 0 0; display: grid; gap: 0; max-width: 46rem; }
+  .findings li { padding: 1.1rem 0; border-top: 1px solid var(--rule); display: grid; grid-template-columns: 7.5rem minmax(0, 1fr); gap: 1rem; }
+  .findings li:last-child { border-bottom: 1px solid var(--rule); }
+  .findings .who { font: 500 0.75rem/1.5 var(--mono); letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); padding-top: 0.2rem; }
+  .findings p { margin: 0; color: var(--ink-2); font-size: 0.98rem; }
+  .findings strong { color: var(--ink); font-weight: 600; }
+
+  .scope {
+    margin-top: 2rem; max-width: 46rem;
+    border-left: 3px solid var(--lambda);
+    padding: 0.2rem 0 0.2rem 1.1rem;
+  }
+  .scope h3 { font-family: var(--sans); }
+  .scope p { color: var(--ink-2); margin: 0; font-size: 0.97rem; }
+
+  /* bibtex */
+  .bib { position: relative; margin-top: 1.25rem; }
+  .bib pre {
+    margin: 0; background: var(--code-bg); border-radius: 10px;
+    padding: 1.25rem 1.35rem; overflow-x: auto;
+    font: 400 0.85rem/1.6 var(--mono); color: var(--ink);
+  }
+  .bib button {
+    position: absolute; top: 0.7rem; right: 0.7rem;
+    font: 500 0.8rem/1 var(--sans); padding: 0.5rem 0.8rem; border-radius: 999px;
+    background: var(--surface); color: var(--ink); border: 1px solid var(--rule); cursor: pointer;
+  }
+
+  footer { border-top: 1px solid var(--rule); padding-block: 2rem 3rem; color: var(--ink-3); font-size: 0.88rem; display: grid; gap: 0.5rem; }
+  footer p { margin: 0; max-width: var(--measure); }
+
+  @media (max-width: 760px) {
+    header.hero { padding-block: 2.75rem 2rem; }
+    .thesis { grid-template-columns: minmax(0, 1fr); gap: 1.25rem; }
+    .contrast, .fig-grid { grid-template-columns: minmax(0, 1fr); }
+    ol.steps { grid-template-columns: minmax(0, 1fr); gap: 1.5rem; }
+    ol.steps li, ol.steps li + li { padding: 0; border-left: 0; }
+    ol.steps li + li { padding-top: 1.5rem; border-top: 1px solid var(--rule); }
+    .derive .row { grid-template-columns: minmax(0, 1fr); gap: 0.35rem; }
+    .dial { padding: 1.25rem; }
+    .dial-top { grid-template-columns: minmax(0, 1fr); }
+    .findings li { grid-template-columns: minmax(0, 1fr); gap: 0.3rem; }
+    .ticks { font-size: 0.66rem; }
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .dial circle, .dial line, .dial rect { transition: cx 0.35s ease, x1 0.35s ease, x2 0.35s ease, x 0.35s ease, width 0.35s ease; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header class="hero">
+    <div class="venue"><b>COLM 2026</b> · Conference on Language Modeling</div>
+    <h1>Safe Inference-Time Alignment via <em>Lagrangian Reward Augmentation</em></h1>
+    <div class="authors">
+      <ul>
+        <li>Yaswanth Chittepu<sup>1</sup></li>
+        <li>Ativ Joshi<sup>1</sup></li>
+        <li>Sohini Chintala<sup>2</sup></li>
+        <li>Scott Niekum<sup>1</sup></li>
+      </ul>
+      <div class="affil"><sup>1</sup> University of Massachusetts Amherst &nbsp;·&nbsp; <sup>2</sup> Independent Researcher</div>
+    </div>
+    <nav class="links" aria-label="Paper resources">
+      <a class="btn primary" href="#" aria-disabled="true" id="paper-link">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M4 1.75h5.5L12.25 4.5v9.75h-8.5z"/><path d="M9.25 1.75V4.75h3"/></svg>
+        Paper (coming soon)
+      </a>
+      <a class="btn" href="#" aria-disabled="true" id="arxiv-link">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M3 3l10 10M13 3L3 13"/></svg>
+        arXiv (coming soon)
+      </a>
+      <a class="btn" href="https://github.com/yaswanthchittepu/LARA">
+        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 .2a8 8 0 0 0-2.53 15.59c.4.07.55-.17.55-.38v-1.33c-2.23.48-2.7-1.07-2.7-1.07-.36-.92-.89-1.17-.89-1.17-.73-.5.05-.49.05-.49.8.06 1.23.83 1.23.83.72 1.22 1.87.87 2.33.66.07-.52.28-.87.5-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82a7.6 7.6 0 0 1 4 0c1.53-1.03 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.28.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48v2.2c0 .21.15.46.55.38A8 8 0 0 0 8 .2z"/></svg>
+        Code
+      </a>
+      <a class="btn" href="#cite">
+        <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path d="M5.5 4 2 8l3.5 4M10.5 4 14 8l-3.5 4"/></svg>
+        BibTeX
+      </a>
+    </nav>
+
+    <div class="thesis">
+      <div class="eq-big" aria-label="r minus lambda star times c"><span class="r">r</span><span class="op">−</span><span class="l">λ<sup style="font-size:.5em">★</sup></span><span class="c">c</span></div>
+      <p><strong>One number makes any decoder safety-aware.</strong> LARA finds the multiplier <span class="m l">λ<sup>★</sup></span> that trades <span class="r">helpfulness reward</span> against <span class="c">harmfulness cost</span> exactly at your safety budget. It calibrates in minutes on a small prompt set and plugs into Best-of-<span class="m">N</span>, ARGS, PARGS or CD-Q, with no weight updates.</p>
+    </div>
+  </header>
+
+  <section id="problem">
+    <div class="col">
+      <p class="eyebrow">The problem</p>
+      <h2>Inference-time alignment optimizes one score. Safety needs two.</h2>
+      <p class="lede">Inference-time methods steer a frozen model while it decodes, which avoids expensive finetuning. But they expect one scalar score. When helpfulness and safety conflict, someone has to pick the weight between them by hand, and nothing guarantees that weight meets a safety requirement.</p>
+      <details class="abstract">
+        <summary>Read the abstract</summary>
+        <p>Inference-time alignment steers a frozen language model during decoding using auxiliary reward signals, avoiding the cost of repeated weight updates. However, existing inference-time alignment methods typically optimize a single scalar score, so explicit safety constraints must either be ignored or encoded through manually tuned penalties. We propose Lagrangian Reward Augmentation (LARA), a general inference-time alignment framework under safety constraints. Starting from a KL-regularized constrained objective with a reward model and a cost model, LARA dualizes the constraint and reduces the optimization problem to a one-dimensional convex problem over a nonnegative dual variable. Estimated on a small calibration set, this dual variable defines an augmented reward that can be used as a drop-in scoring signal within existing inference-time alignment methods. For sequence-level sampling methods, such as Best-of-N reranking, the calibrated dual variable corresponds to the solution of the expected-cost constrained problem. For token-level reward-guided decoding methods, the same construction yields a principled dual-calibrated heuristic rather than an exact constrained-policy guarantee. We evaluate LARA on both sequence-level and token-level inference-time alignment methods, and find that LARA improves the helpfulness-harmlessness tradeoff, with Best-of-N achieving the best performance among inference-time methods, approaching finetuning-based direct alignment baselines.</p>
+      </details>
+    </div>
+    <div class="contrast">
+      <div class="before">
+        <div class="tag">Today: hand-tuned penalty</div>
+        <div class="formula"><span class="r">r</span> − <span class="w">w</span> · <span class="c">c</span></div>
+        <p>Pick <span class="m">w</span> by trial and error. Too small, and responses exceed the harm budget. Too large, and helpfulness drops for no gain in safety. Retune whenever the model or the budget changes.</p>
+      </div>
+      <div class="after">
+        <div class="tag">LARA: derived from the constraint</div>
+        <div class="formula"><span class="r">r</span> − <span class="l">λ<sup style="font-size:.6em">★</sup></span><span class="c">c</span> &nbsp;<span class="w" style="font-size:.8em">s.t.</span> <span style="font-size:.85em">𝔼[<span class="c">c</span>] ≤ τ</span></div>
+        <p>State the safety budget <span class="m">τ</span> directly. LARA solves for the smallest penalty that meets it. <span class="m l">λ<sup>★</sup></span> is the <em>shadow price</em> of harm.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="method">
+    <div class="col">
+      <p class="eyebrow">How it works</p>
+      <h2>Move the Safe RLHF constraint from training to decoding</h2>
+      <p>We start from the same KL-regularized, cost-constrained objective that Safe RLHF solves with RL. After dualizing the constraint, the search over <em>policies</em> collapses to a search over a single nonnegative number.</p>
+    </div>
+
+    <ol class="steps">
+      <li>
+        <h3>Sample and score</h3>
+        <div class="sf">2,000 prompts × 20 responses</div>
+        <p>Draw responses from the frozen reference model on a small calibration set. Score each one with the reward model <span class="m r">r</span> and the cost model <span class="m c">c</span>.</p>
+      </li>
+      <li>
+        <h3>Calibrate λ★</h3>
+        <div class="sf">binary search on a 1-D convex dual</div>
+        <p>The dual's slope, <span class="m">τ − 𝔼[<span class="c">c</span>]</span>, is monotone in <span class="m">λ</span>, so binary search finds the root. For a safety margin we take the 97.5th percentile over 10,000 bootstrap resamples, which takes about 2 minutes.</p>
+      </li>
+      <li>
+        <h3>Decode with any method</h3>
+        <div class="sf">drop-in scoring signal</div>
+        <p>Give <span class="m"><span class="r">r</span> − <span class="l">λ<sup>★</sup></span><span class="c">c</span></span> to Best-of-<span class="m">N</span>, ARGS, PARGS or CD-Q in place of their usual reward. The decoder itself does not change.</p>
+      </li>
+    </ol>
+
+    <div class="derive col">
+      <div class="row">
+        <div class="k">Constrained goal</div>
+        <div class="v m">max<sub>π</sub> 𝔼[<span class="r">r</span>] − β·KL(π ‖ π<sub>ref</sub>) &nbsp;<span style="font-style:normal">s.t.</span>&nbsp; 𝔼[<span class="c">c</span>] ≤ τ</div>
+      </div>
+      <div class="row">
+        <div class="k">Closed-form dual</div>
+        <div class="v m">g(<span class="l">λ</span>) = β 𝔼<sub>x</sub> log 𝔼<sub>y∼π<sub>ref</sub></sub> exp<span class="frac"><span><span class="r">r</span> − <span class="l">λ</span><span class="c">c</span></span><span>β</span></span> + <span class="l">λ</span>τ
+          <span class="note">Strong duality holds, and for a fixed λ the optimal policy is the reference model tilted by the net reward: π<sup>★</sup><sub>λ</sub> ∝ π<sub>ref</sub> · exp((r − λc)/β).</span>
+        </div>
+      </div>
+      <div class="row">
+        <div class="k">Why search is easy</div>
+        <div class="v m">g′(<span class="l">λ</span>) = τ − 𝔼<sub>π<sup>★</sup><sub>λ</sub></sub>[<span class="c">c</span>], &nbsp; g″(<span class="l">λ</span>) = <span class="frac"><span>1</span><span>β</span></span>𝔼[Var(<span class="c">c</span>)] ≥ 0
+          <span class="note">The dual is convex, so expected cost falls monotonically as λ rises. At the optimum, expected cost equals the budget exactly. A finite-sample bound shows the estimated λ̂ concentrates around λ★ as the number of prompts N and samples per prompt K grow.</span>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section id="dial">
+    <div class="col">
+      <p class="eyebrow">Try it</p>
+      <h2>Tighten the budget and watch the price of harm rise</h2>
+      <p>Each position below is a real calibration run for Llama-3.2-3B with Best-of-20. Lower cost means safer. The paper's main setting is <span class="m">τ</span> = −4.</p>
+    </div>
+
+    <div class="dial" role="group" aria-labelledby="tau-label">
+      <div class="dial-top">
+        <div>
+          <label for="tau" id="tau-label">Safety budget <span class="m">τ</span> <span class="hint">(maximum allowed expected cost)</span></label>
+          <input type="range" id="tau" min="0" max="7" step="1" value="4" aria-describedby="dial-explain">
+          <div class="ticks" aria-hidden="true">
+            <span>−2.00</span><span>−3.00</span><span>−3.50</span><span>−3.75</span><span>−4.00</span><span>−4.25</span><span>−4.50</span><span>−5.00</span>
+          </div>
+        </div>
+        <div class="readout" aria-live="polite">
+          <div><span class="lab">λ★</span><span class="val l" id="out-lambda">0.605</span></div>
+          <div><span class="lab">𝔼[c]</span><span class="val c" id="out-cost">−4.131</span></div>
+          <div><span class="lab">Slack</span><span class="val" id="out-slack">−0.131</span></div>
+        </div>
+      </div>
+
+      <svg viewBox="0 0 640 96" role="img" aria-label="Number line of expected cost with the budget and achieved cost marked">
+        <rect x="0" y="30" width="640" height="26" fill="var(--code-bg)" rx="4"></rect>
+        <rect id="unsafe" x="0" y="30" width="0" height="26" fill="var(--cost-wash)"></rect>
+        <g font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="var(--ink-3)" text-anchor="middle" id="axis"></g>
+        <line id="tau-line" x1="0" x2="0" y1="20" y2="66" stroke="var(--ink)" stroke-width="2" stroke-dasharray="4 3"></line>
+        <text id="tau-text" x="0" y="13" font-family="IBM Plex Mono, ui-monospace, monospace" font-size="11" fill="var(--ink)" text-anchor="middle">τ</text>
+        <circle id="cost-dot" cx="0" cy="43" r="7" fill="var(--cost)" stroke="var(--surface)" stroke-width="2"></circle>
+        <text x="4" y="92" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--ink-3)">← safer</text>
+        <text x="636" y="92" font-family="IBM Plex Sans, sans-serif" font-size="11" fill="var(--ink-3)" text-anchor="end">more harmful →</text>
+      </svg>
+
+      <span class="status" id="status">Constraint met</span>
+      <p class="explain" id="dial-explain"></p>
+      <p class="src">Source: paper appendix, τ sweep table. The shaded region is over budget.</p>
+    </div>
+  </section>
+
+  <section id="results">
+    <div class="col">
+      <p class="eyebrow">Result 1 · Constraint satisfaction</p>
+      <h2>For Best-of-N, λ★ lands right on the safety boundary</h2>
+      <p>We sweep <span class="m">λ</span> and rerank with <span class="m"><span class="r">r</span> − λ<span class="c">c</span></span>. For any <span class="m">λ</span> below <span class="m l">λ<sup>★</sup></span>, expected cost exceeds <span class="m">τ</span>. Any larger value still meets the budget, but gives up helpfulness for no reason. The calibrated value sits at the boundary, as the theory predicts. The same pattern holds for Llama-3.1-8B.</p>
+    </div>
+
+    <figure class="fig" id="fig-sweep">
+      <div class="fig-head">
+        <div class="seg" role="group" aria-label="Model">
+          <button type="button" id="sweep-llama" aria-pressed="true" data-src="figs/pareto_plot_llama.png" data-alt="Best-of-N sweep over lambda for Llama-3.2-3B: lambda star of 0.6 sits at the threshold tau of minus 4.">Llama-3.2-3B</button>
+          <button type="button" id="sweep-qwen" aria-pressed="false" data-src="figs/pareto_plot_qwen.png" data-alt="Best-of-N sweep over lambda for Qwen-2.5-3B.">Qwen-2.5-3B</button>
+          <button type="button" id="sweep-8b" aria-pressed="false" data-src="figs/pareto-llama-8b.png" data-alt="Best-of-N sweep over lambda for Llama-3.1-8B.">Llama-3.1-8B</button>
+        </div>
+        <span class="legend-note">★ calibrated λ★ · dashed line = budget τ</span>
+      </div>
+      <div class="plate"><img id="sweep-img" src="figs/pareto_plot_llama.png" alt="Best-of-N sweep over lambda for Llama-3.2-3B: lambda star of 0.6 sits at the threshold tau of minus 4." width="2293" height="1428" loading="lazy"></div>
+      <figcaption>Expected helpfulness 𝔼[r] against expected cost 𝔼[c] for the Best-of-20 policy at each value of λ. Points to the right of the dashed line exceed the budget.</figcaption>
+    </figure>
+  </section>
+
+  <section id="comparison">
+    <div class="col">
+      <p class="eyebrow">Result 2 · Against baselines</p>
+      <h2>Close to finetuning quality, without finetuning</h2>
+      <p>We compare LARA-guided decoding with finetuned baselines (SFT, SafeDPO, Safe-RLHF) and with the same decoders at <span class="m">λ</span> = 0 (no safety penalty) and at <span class="m">λ</span><sub>max</sub> = 2 (over-penalized). The evaluation uses 1,024 BeaverTails test prompts. Up and to the right is better.</p>
+    </div>
+
+    <figure class="fig" id="fig-compare">
+      <div class="fig-head">
+        <div class="seg" role="group" aria-label="Model">
+          <button type="button" id="cmp-llama" aria-pressed="true" data-model="llama">Llama-3.2-3B</button>
+          <button type="button" id="cmp-qwen" aria-pressed="false" data-model="qwen">Qwen-2.5-3B</button>
+        </div>
+        <span class="legend-note">● λ = 0 · ★ λ★ · ○ λ<sub>max</sub></span>
+      </div>
+      <div class="fig-grid">
+        <div class="plate">
+          <img id="cmp-model" src="figs/model-eval-llama3.2-3b-1024.png" alt="Helpfulness versus harmlessness under the beaver-7b reward and cost models, Llama-3.2-3B." width="2049" height="1554" loading="lazy">
+          <div class="cap">Gold reward and cost models</div>
+        </div>
+        <div class="plate">
+          <img id="cmp-gpt" src="figs/gpt-eval-llama3.2-3b-1024.png" alt="Helpfulness versus harmlessness rated by GPT-4o-mini, Llama-3.2-3B." width="2049" height="1484" loading="lazy">
+          <div class="cap">GPT-4o-mini as judge</div>
+        </div>
+      </div>
+      <figcaption>Left: scores from the beaver-7b-unified reward and cost models. Right: 1–10 ratings from GPT-4o-mini, using the SafeDPO evaluation prompts.</figcaption>
+    </figure>
+
+    <ul class="findings">
+      <li>
+        <span class="who">Best-of-N</span>
+        <p><strong>Best-of-N with λ★ is the strongest inference-time method.</strong> Under the gold models it is more helpful than SafeDPO and about as harmless, with no weight updates. At λ = 0 its responses are highly harmful, and at λ<sub>max</sub> it loses helpfulness for little safety gain.</p>
+      </li>
+      <li>
+        <span class="who">Token-level</span>
+        <p><strong>Among token-level methods, CD-Q comes out ahead.</strong> It trains a prefix value function, whereas ARGS scores prefixes with a full-sequence reward model and PARGS assumes each prefix inherits its full response's label. ARGS and PARGS fall below SFT on helpfulness.</p>
+      </li>
+      <li>
+        <span class="who">Finetuning</span>
+        <p><strong>Safe-RLHF still has the best overall tradeoff.</strong> It pays for that with full RL training. LARA gets most of the way there using a 2-minute calibration.</p>
+      </li>
+      <li>
+        <span class="who">Evaluators</span>
+        <p><strong>GPT-4o-mini tends to merge helpfulness and harmlessness into one score.</strong> Its two ratings correlate at 0.73, against 0.13 for the gold models. That explains why Best-of-N looks flat across λ under GPT. For judging constraint satisfaction, use the gold models, which score the two axes independently.</p>
+      </li>
+    </ul>
+
+    <aside class="scope">
+      <h3>Where the guarantee applies</h3>
+      <p>The dual is defined over complete responses, so λ★ exactly solves the expected-cost constraint for <strong>sequence-level</strong> samplers such as Best-of-N. In <strong>token-level</strong> decoders it serves as a principled, dual-calibrated heuristic. These decoders already approximate the sequence-level policy, and LARA adds no further approximation.</p>
+    </aside>
+  </section>
+
+  <section id="cite">
+    <div class="col">
+      <p class="eyebrow">Citation</p>
+      <h2>BibTeX</h2>
+    </div>
+    <div class="bib">
+      <button type="button" id="copy-bib">Copy</button>
+<pre id="bibtex">@inproceedings{chittepu2026lara,
+  title     = {Safe Inference-Time Alignment via Lagrangian Reward Augmentation},
+  author    = {Chittepu, Yaswanth and Joshi, Ativ and Chintala, Sohini and Niekum, Scott},
+  booktitle = {Conference on Language Modeling (COLM)},
+  year      = {2026}
+}</pre>
+    </div>
+  </section>
+
+  <footer>
+    <p>This work was done in the Safe, Correct, and Aligned Learning and Robotics Lab (SCALAR) at the University of Massachusetts Amherst. SCALAR is supported in part by the NSF (IIS-2437426) and Open Philanthropy.</p>
+    <p>Correspondence: ychittepu@umass.edu</p>
+  </footer>
+</div>
+
+<script>
+(function () {
+  // τ sweep, Llama-3.2-3B, BoN-20 (paper appendix table)
+  var SWEEP = [
+    { tau: -2.00, lam: 0.000, cost: -3.503 },
+    { tau: -3.00, lam: 0.000, cost: -3.503 },
+    { tau: -3.50, lam: 0.066, cost: -3.641 },
+    { tau: -3.75, lam: 0.266, cost: -3.887 },
+    { tau: -4.00, lam: 0.605, cost: -4.131 },
+    { tau: -4.25, lam: 1.662, cost: -4.376 },
+    { tau: -4.50, lam: 17.373, cost: -4.519 },
+    { tau: -5.00, lam: null, cost: null }
+  ];
+  var LO = -5.25, HI = -1.75, X0 = 16, X1 = 624;
+  function x(v) { return X0 + (v - LO) / (HI - LO) * (X1 - X0); }
+  function fmt(v) { return (v < 0 ? "−" : "") + Math.abs(v).toFixed(3); }
+
+  var axis = document.getElementById("axis");
+  [-5, -4.5, -4, -3.5, -3, -2.5, -2].forEach(function (t) {
+    var ns = "http://www.w3.org/2000/svg";
+    var tick = document.createElementNS(ns, "line");
+    tick.setAttribute("x1", x(t)); tick.setAttribute("x2", x(t));
+    tick.setAttribute("y1", 56); tick.setAttribute("y2", 61);
+    tick.setAttribute("stroke", "var(--ink-3)");
+    axis.appendChild(tick);
+    var lab = document.createElementNS(ns, "text");
+    lab.setAttribute("x", x(t)); lab.setAttribute("y", 76);
+    lab.textContent = (t < 0 ? "−" : "") + Math.abs(t).toFixed(1);
+    axis.appendChild(lab);
+  });
+
+  var el = function (id) { return document.getElementById(id); };
+  var slider = el("tau");
+
+  function render() {
+    var d = SWEEP[+slider.value];
+    var tx = x(d.tau);
+    el("tau-line").setAttribute("x1", tx); el("tau-line").setAttribute("x2", tx);
+    el("tau-text").setAttribute("x", tx);
+    el("tau-text").textContent = "τ = " + fmt(d.tau).replace(/0$/, "");
+    el("unsafe").setAttribute("x", tx);
+    el("unsafe").setAttribute("width", Math.max(0, 640 - tx));
+    var st = el("status");
+    var dot = el("cost-dot");
+    if (d.lam === null) {
+      el("out-lambda").textContent = "—";
+      el("out-cost").textContent = "—";
+      el("out-slack").textContent = "—";
+      dot.setAttribute("visibility", "hidden");
+      st.className = "status bad"; st.textContent = "Infeasible";
+      el("dial-explain").textContent = "No value of λ meets this budget using the base model's samples. The only fix is a safer base model.";
+      slider.setAttribute("aria-valuetext", "tau −5.00, infeasible");
+      return;
+    }
+    dot.setAttribute("visibility", "visible");
+    dot.setAttribute("cx", x(d.cost));
+    el("out-lambda").textContent = d.lam.toFixed(3);
+    el("out-cost").textContent = fmt(d.cost);
+    el("out-slack").textContent = fmt(d.cost - d.tau);
+    var msg;
+    if (d.lam === 0) {
+      st.className = "status idle"; st.textContent = "Constraint inactive";
+      msg = "The base model already meets this budget (" + fmt(d.cost) + " ≤ " + fmt(d.tau) + "), so λ★ = 0 and LARA leaves the reward unchanged.";
+    } else if (d.lam > 10) {
+      st.className = "status"; st.textContent = "Constraint met, near the edge";
+      msg = "Close to the limit of what the base model can reach, λ★ jumps to " + d.lam.toFixed(1) + ". Meeting this budget takes a very steep penalty on harm.";
+    } else {
+      st.className = "status"; st.textContent = "Constraint met";
+      msg = "LARA charges λ★ = " + d.lam.toFixed(3) + " units of reward per unit of cost, which is just enough to bring expected cost below the budget.";
+    }
+    el("dial-explain").textContent = msg;
+    slider.setAttribute("aria-valuetext", "tau " + fmt(d.tau) + ", lambda star " + d.lam.toFixed(3));
+  }
+  slider.addEventListener("input", render);
+  render();
+
+  // figure toggles
+  var sweepBtns = document.querySelectorAll("#fig-sweep .seg button");
+  sweepBtns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      sweepBtns.forEach(function (o) { o.setAttribute("aria-pressed", o === b ? "true" : "false"); });
+      var img = el("sweep-img");
+      img.src = b.dataset.src; img.alt = b.dataset.alt;
+    });
+  });
+  var CMP = {
+    llama: { model: "figs/model-eval-llama3.2-3b-1024.png", gpt: "figs/gpt-eval-llama3.2-3b-1024.png", name: "Llama-3.2-3B" },
+    qwen:  { model: "figs/model_eval_qwen.png", gpt: "figs/gpt_eval_qwen.png", name: "Qwen-2.5-3B" }
+  };
+  var cmpBtns = document.querySelectorAll("#fig-compare .seg button");
+  cmpBtns.forEach(function (b) {
+    b.addEventListener("click", function () {
+      cmpBtns.forEach(function (o) { o.setAttribute("aria-pressed", o === b ? "true" : "false"); });
+      var c = CMP[b.dataset.model];
+      el("cmp-model").src = c.model;
+      el("cmp-model").alt = "Helpfulness versus harmlessness under the beaver-7b reward and cost models, " + c.name + ".";
+      el("cmp-gpt").src = c.gpt;
+      el("cmp-gpt").alt = "Helpfulness versus harmlessness rated by GPT-4o-mini, " + c.name + ".";
+    });
+  });
+
+  // BibTeX copy
+  el("copy-bib").addEventListener("click", function () {
+    var btn = this, text = el("bibtex").textContent;
+    function done(ok) { btn.textContent = ok ? "Copied" : "Select and copy"; setTimeout(function () { btn.textContent = "Copy"; }, 1800); }
+    try {
+      navigator.clipboard.writeText(text).then(function () { done(true); }, function () { selectBib(); done(false); });
+    } catch (e) { selectBib(); done(false); }
+    function selectBib() {
+      var r = document.createRange(); r.selectNodeContents(el("bibtex"));
+      var s = window.getSelection(); s.removeAllRanges(); s.addRange(r);
+    }
+  });
+
+  document.querySelectorAll('a[aria-disabled="true"]').forEach(function (a) {
+    a.addEventListener("click", function (e) { e.preventDefault(); });
+  });
+})();
+</script>
+</body>
+</html>
