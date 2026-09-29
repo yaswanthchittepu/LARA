@@ -8,6 +8,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans:ital,wght@0,400;0,500;0,600;1,400&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;0,6..72,600;1,6..72,400;1,6..72,500&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.css">
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/katex.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/KaTeX/0.16.9/contrib/auto-render.min.js"></script>
 <style>
   :root {
     --ground: #F6F7FA;
@@ -238,7 +241,7 @@
   .derive { margin-top: 2.5rem; display: grid; gap: 1.25rem; }
   .derive .row { display: grid; grid-template-columns: 11rem minmax(0, 1fr); gap: 1.25rem; align-items: baseline; }
   .derive .k { font: 500 0.78rem/1.4 var(--mono); letter-spacing: 0.04em; color: var(--ink-3); text-transform: uppercase; }
-  .derive .v { font: 400 1.2rem/1.5 var(--serif); overflow-x: auto; }
+  .derive .v { min-width: 0; }
   .derive .v .note { display: block; font: 400 0.93rem/1.55 var(--sans); color: var(--ink-2); margin-top: 0.3rem; }
   .frac { display: inline-flex; flex-direction: column; vertical-align: middle; text-align: center; font-size: 0.9em; margin-inline: 0.1em; }
   .frac > span:first-child { border-bottom: 1px solid currentColor; padding-inline: 0.2em; }
@@ -341,6 +344,22 @@
   @media (prefers-reduced-motion: no-preference) {
     .dial circle, .dial line, .dial rect { transition: cx 0.35s ease, x1 0.35s ease, x2 0.35s ease, x 0.35s ease, width 0.35s ease; }
   }
+
+  /* KaTeX: color classes reuse the page tokens, so math follows the theme */
+  .katex .r { color: var(--reward); }
+  .katex .c { color: var(--cost); }
+  .katex .l { color: var(--lambda); }
+  .katex { font-size: 1.08em; }
+  .eq-big .katex { font-size: clamp(2.2rem, 7vw, 4rem); }
+  .derive .v .eqs { overflow-x: auto; overflow-y: hidden; }
+  .derive .v .katex-display { margin: 0.1rem 0 0.5rem; text-align: left; }
+  .derive .v .katex-display > .katex { text-align: left; font-size: 1.1em; }
+  .derive .row { align-items: start; }
+  .derive .k { padding-top: 0.55rem; }
+  @media (max-width: 760px) {
+    .derive .v .katex-display > .katex { font-size: 0.92em; }
+    .derive .k { padding-top: 0; }
+  }
 </style>
 </head>
 <body>
@@ -388,8 +407,8 @@
     </p>
 
     <div class="thesis">
-      <div class="eq-big" aria-label="r minus lambda star times c"><span class="r">r</span><span class="op">−</span><span class="l">λ<sup style="font-size:.5em">★</sup></span><span class="c">c</span></div>
-      <p><strong>One number makes any decoder safety-aware.</strong> LARA finds the multiplier <span class="m l">λ<sup>★</sup></span> that trades <span class="r">helpfulness reward</span> against <span class="c">harmfulness cost</span> exactly at your safety budget. It calibrates in minutes on a small prompt set and plugs into Best-of-<span class="m">N</span>, ARGS, PARGS or CD-Q, with no weight updates.</p>
+      <div class="eq-big" aria-label="r minus lambda star times c">\(\R{r} - \Lam{\lambda^\star}\,\C{c}\)</div>
+      <p><strong>One number makes any decoder safety-aware.</strong> LARA finds the multiplier \(\Lam{\lambda^\star}\) that trades <span class="r">helpfulness reward</span> against <span class="c">harmfulness cost</span> exactly at your safety budget. It calibrates in minutes on a small prompt set and plugs into Best-of-\(N\), ARGS, PARGS or CD-Q, with no weight updates.</p>
     </div>
   </header>
 
@@ -406,13 +425,13 @@
     <div class="contrast">
       <div class="before">
         <div class="tag">Today: hand-tuned penalty</div>
-        <div class="formula"><span class="r">r</span> − <span class="w">w</span> · <span class="c">c</span></div>
-        <p>Pick <span class="m">w</span> by trial and error. Too small, and responses exceed the harm budget. Too large, and helpfulness drops for no gain in safety. Retune whenever the model or the budget changes.</p>
+        <div class="formula">\(\R{r} - w\,\C{c}\)</div>
+        <p>Pick \(w\) by trial and error. Too small, and responses exceed the harm budget. Too large, and helpfulness drops for no gain in safety. Retune whenever the model or the budget changes.</p>
       </div>
       <div class="after">
         <div class="tag">LARA: derived from the constraint</div>
-        <div class="formula"><span class="r">r</span> − <span class="l">λ<sup style="font-size:.6em">★</sup></span><span class="c">c</span> &nbsp;<span class="w" style="font-size:.8em">s.t.</span> <span style="font-size:.85em">𝔼[<span class="c">c</span>] ≤ τ</span></div>
-        <p>State the safety budget <span class="m">τ</span> directly. LARA solves for the smallest penalty that meets it. <span class="m l">λ<sup>★</sup></span> is the <em>shadow price</em> of harm.</p>
+        <div class="formula">\(\R{r} - \Lam{\lambda^\star}\,\C{c} \quad \text{s.t.} \quad \mathbb{E}[\C{c}] \le \tau\)</div>
+        <p>State the safety budget \(\tau\) directly. LARA solves for the smallest penalty that meets it. \(\Lam{\lambda^\star}\) is the <em>shadow price</em> of harm.</p>
       </div>
     </div>
   </section>
@@ -428,35 +447,33 @@
       <li>
         <h3>Sample and score</h3>
         <div class="sf">2,000 prompts × 20 responses</div>
-        <p>Draw responses from the frozen reference model on a small calibration set. Score each one with the reward model <span class="m r">r</span> and the cost model <span class="m c">c</span>.</p>
+        <p>Draw responses from the frozen reference model on a small calibration set. Score each one with the reward model \(\R{r}\) and the cost model \(\C{c}\).</p>
       </li>
       <li>
         <h3>Calibrate λ★</h3>
         <div class="sf">binary search on a 1-D convex dual</div>
-        <p>The dual's slope, <span class="m">τ − 𝔼[<span class="c">c</span>]</span>, is monotone in <span class="m">λ</span>, so binary search finds the root. For a safety margin we take the 97.5th percentile over 10,000 bootstrap resamples, which takes about 2 minutes.</p>
+        <p>The dual's slope, \(\tau - \mathbb{E}[\C{c}]\), is monotone in \(\lambda\), so binary search finds the root. For a safety margin we take the 97.5th percentile over 10,000 bootstrap resamples, which takes about 2 minutes.</p>
       </li>
       <li>
         <h3>Decode with any method</h3>
         <div class="sf">drop-in scoring signal</div>
-        <p>Give <span class="m"><span class="r">r</span> − <span class="l">λ<sup>★</sup></span><span class="c">c</span></span> to Best-of-<span class="m">N</span>, ARGS, PARGS or CD-Q in place of their usual reward. The decoder itself does not change.</p>
+        <p>Give \(\R{r} - \Lam{\lambda^\star}\,\C{c}\) to Best-of-\(N\), ARGS, PARGS or CD-Q in place of their usual reward. The decoder itself does not change.</p>
       </li>
     </ol>
 
-    <div class="derive col">
+    <div class="derive col" style="max-width:52rem">
       <div class="row">
         <div class="k">Constrained goal</div>
-        <div class="v m">max<sub>π</sub> 𝔼[<span class="r">r</span>] − β·KL(π ‖ π<sub>ref</sub>) &nbsp;<span style="font-style:normal">s.t.</span>&nbsp; 𝔼[<span class="c">c</span>] ≤ τ</div>
+        <div class="v"><div class="eqs">\[\max_{\pi}\; \mathbb{E}_{x\sim D_x}\Big[\mathbb{E}_{y\sim\pi(\cdot\mid x)}\,\R{r(x,y)} - \beta\, D_{\mathrm{KL}}\big(\pi(\cdot\mid x)\,\|\,\pi_{\mathrm{ref}}(\cdot\mid x)\big)\Big]\]\[\text{s.t.}\quad \mathbb{E}_{x\sim D_x,\; y\sim\pi(\cdot\mid x)}\,\C{c(x,y)} \le \tau\]</div></div>
       </div>
       <div class="row">
         <div class="k">Closed-form dual</div>
-        <div class="v m">g(<span class="l">λ</span>) = β 𝔼<sub>x</sub> log 𝔼<sub>y∼π<sub>ref</sub></sub> exp<span class="frac"><span><span class="r">r</span> − <span class="l">λ</span><span class="c">c</span></span><span>β</span></span> + <span class="l">λ</span>τ
-          <span class="note">Strong duality holds, and for a fixed λ the optimal policy is the reference model tilted by the net reward: π<sup>★</sup><sub>λ</sub> ∝ π<sub>ref</sub> · exp((r − λc)/β).</span>
+        <div class="v"><div class="eqs">\[g(\Lam{\lambda}) = \beta\, \mathbb{E}_{x\sim D_x}\!\left[\log \mathbb{E}_{y\sim\pi_{\mathrm{ref}}(\cdot\mid x)} \exp\!\left(\frac{\R{r(x,y)} - \Lam{\lambda}\,\C{c(x,y)}}{\beta}\right)\right] + \Lam{\lambda}\,\tau\]\[\pi^\star_{\Lam{\lambda}}(y\mid x) \;\propto\; \pi_{\mathrm{ref}}(y\mid x)\, \exp\!\left(\frac{\R{r(x,y)} - \Lam{\lambda}\,\C{c(x,y)}}{\beta}\right)\]</div><span class="note">Strong duality holds, and for a fixed \(\lambda\) the optimal policy is a Gibbs tilt of the reference model by the net reward \(\R{r} - \lambda\,\C{c}\).</span>
         </div>
       </div>
       <div class="row">
         <div class="k">Why search is easy</div>
-        <div class="v m">g′(<span class="l">λ</span>) = τ − 𝔼<sub>π<sup>★</sup><sub>λ</sub></sub>[<span class="c">c</span>], &nbsp; g″(<span class="l">λ</span>) = <span class="frac"><span>1</span><span>β</span></span>𝔼[Var(<span class="c">c</span>)] ≥ 0
-          <span class="note">The dual is convex, so expected cost falls monotonically as λ rises. At the optimum, expected cost equals the budget exactly. A finite-sample bound shows the estimated λ̂ concentrates around λ★ as the number of prompts N and samples per prompt K grow.</span>
+        <div class="v"><div class="eqs">\[g^{\prime}(\Lam{\lambda}) = \tau - \mathbb{E}_{x\sim D_x,\; y\sim\pi^\star_{\Lam{\lambda}}(\cdot\mid x)}\big[\C{c(x,y)}\big]\]\[g^{\prime\prime}(\Lam{\lambda}) = \frac{1}{\beta}\, \mathbb{E}_{x\sim D_x}\Big[\operatorname{Var}_{y\sim\pi^\star_{\Lam{\lambda}}(\cdot\mid x)}\big(\C{c(x,y)}\big)\Big] \ge 0\]</div><span class="note">The dual is convex, so expected cost falls monotonically as \(\lambda\) rises. At the optimum, expected cost equals the budget exactly. A finite-sample bound shows the estimated \(\hat\lambda\) concentrates around \(\lambda^\star\) as the number of prompts \(N\) and samples per prompt \(K\) grow.</span>
         </div>
       </div>
     </div>
@@ -466,13 +483,13 @@
     <div class="col">
       <p class="eyebrow">Try it</p>
       <h2>Tighten the budget and watch the price of harm rise</h2>
-      <p>Each position below is a real calibration run for Llama-3.2-3B with Best-of-20. Lower cost means safer. The paper's main setting is <span class="m">τ</span> = −4.</p>
+      <p>Each position below is a real calibration run for Llama-3.2-3B with Best-of-20. Lower cost means safer. The paper's main setting is \(\tau = -4\).</p>
     </div>
 
     <div class="dial" role="group" aria-labelledby="tau-label">
       <div class="dial-top">
         <div>
-          <label for="tau" id="tau-label">Safety budget <span class="m">τ</span> <span class="hint">(maximum allowed expected cost)</span></label>
+          <label for="tau" id="tau-label">Safety budget \(\tau\) <span class="hint">(maximum allowed expected cost)</span></label>
           <input type="range" id="tau" min="0" max="7" step="1" value="4" aria-describedby="dial-explain">
           <div class="ticks" aria-hidden="true">
             <span>−2.00</span><span>−3.00</span><span>−3.50</span><span>−3.75</span><span>−4.00</span><span>−4.25</span><span>−4.50</span><span>−5.00</span>
@@ -506,7 +523,7 @@
     <div class="col">
       <p class="eyebrow">Result 1 · Constraint satisfaction</p>
       <h2>For Best-of-N, λ★ lands right on the safety boundary</h2>
-      <p>We sweep <span class="m">λ</span> and rerank with <span class="m"><span class="r">r</span> − λ<span class="c">c</span></span>. For any <span class="m">λ</span> below <span class="m l">λ<sup>★</sup></span>, expected cost exceeds <span class="m">τ</span>. Any larger value still meets the budget, but gives up helpfulness for no reason. The calibrated value sits at the boundary, as the theory predicts. The same pattern holds for Llama-3.1-8B.</p>
+      <p>We sweep \(\lambda\) and rerank with \(\R{r} - \lambda\,\C{c}\). For any \(\lambda\) below \(\Lam{\lambda^\star}\), expected cost exceeds \(\tau\). Any larger value still meets the budget, but gives up helpfulness for no reason. The calibrated value sits at the boundary, as the theory predicts. The same pattern holds for Llama-3.1-8B.</p>
     </div>
 
     <figure class="fig" id="fig-sweep">
@@ -527,7 +544,7 @@
     <div class="col">
       <p class="eyebrow">Result 2 · Against baselines</p>
       <h2>Close to finetuning quality, without finetuning</h2>
-      <p>We compare LARA-guided decoding with finetuned baselines (SFT, SafeDPO, Safe-RLHF) and with the same decoders at <span class="m">λ</span> = 0 (no safety penalty) and at <span class="m">λ</span><sub>max</sub> = 2 (over-penalized). The evaluation uses 1,024 BeaverTails test prompts. Up and to the right is better.</p>
+      <p>We compare LARA-guided decoding with finetuned baselines (SFT, SafeDPO, Safe-RLHF) and with the same decoders at \(\lambda = 0\) (no safety penalty) and at \(\lambda_{\max} = 2\) (over-penalized). The evaluation uses 1,024 BeaverTails test prompts. Up and to the right is better.</p>
     </div>
 
     <figure class="fig" id="fig-compare">
@@ -716,6 +733,18 @@
     a.addEventListener("click", function (e) { e.preventDefault(); });
   });
 })();
+</script>
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+  if (!window.renderMathInElement) return;
+  renderMathInElement(document.body, {
+    delimiters: [{ left: "\\[", right: "\\]", display: true }, { left: "\\(", right: "\\)", display: false }],
+    macros: { "\\R": "\\htmlClass{r}{#1}", "\\C": "\\htmlClass{c}{#1}", "\\Lam": "\\htmlClass{l}{#1}" },
+    trust: function (ctx) { return ctx.command === "\\htmlClass"; },
+    strict: false,
+    throwOnError: false
+  });
+});
 </script>
 </body>
 </html>
